@@ -226,7 +226,9 @@ class Client(threading.local):
         to ensure it is the correct length and composed of the right
         characters.
         @param key_encoder: (default None) If provided a functor that will
-        be called to encode keys before they are checked and used.
+        be called to encode keys before they are checked and used. It will
+        be expected to take one parameter (the key) and return a new encoded
+        key as a result.
         """
         super(Client, self).__init__()
         self.debug = debug
@@ -445,10 +447,10 @@ class Client(threading.local):
             write = bigcmd.append
             if time is not None:
                 for key in server_keys[server]:  # These are mangled keys
-                    write("delete %s %d\r\n" % (key, time))
+                    write("delete %s %d\r\n" % (self.key_encoder(key), time))
             else:
                 for key in server_keys[server]:  # These are mangled keys
-                    write("delete %s\r\n" % key)
+                    write("delete %s\r\n" % self.key_encoder(key))
             try:
                 server.send_cmds(''.join(bigcmd))
             except socket.error as msg:
@@ -724,7 +726,7 @@ class Client(threading.local):
                 # Tuple of hashvalue, key ala _get_server(). Caller is
                 # essentially telling us what server to stuff this on.
                 # Ensure call to _get_server gets a Tuple as well.
-                str_orig_key = str(orig_key[1])
+                str_orig_key = self.key_encoder(str(orig_key[1]))
 
                 # Gotta pre-mangle key before hashing to a
                 # server. Returns the mangled key.
@@ -732,7 +734,7 @@ class Client(threading.local):
                     (orig_key[0], key_prefix + str_orig_key))
             else:
                 # set_multi supports int / long keys.
-                str_orig_key = str(orig_key)
+                str_orig_key = self.key_encoder(str(orig_key))
                 server, key = self._get_server(key_prefix + str_orig_key)
 
             # Now check to make sure key length is proper ...
@@ -825,7 +827,7 @@ class Client(threading.local):
                         min_compress_len)
                     if store_info:
                         msg = "set %s %d %d %d\r\n%s\r\n"
-                        write(msg % (key,
+                        write(msg % (self.key_encoder(key),
                                      store_info[0],
                                      time,
                                      store_info[1],
@@ -1087,7 +1089,8 @@ class Client(threading.local):
         dead_servers = []
         for server in six.iterkeys(server_keys):
             try:
-                server.send_cmd("get %s" % " ".join(server_keys[server]))
+                keys = [self.key_encoder(k) for k in server_keys[server]]
+                server.send_cmd("get %s" % " ".join(keys))
             except socket.error as msg:
                 if isinstance(msg, tuple):
                     msg = msg[1]
